@@ -8,6 +8,8 @@ import type { IExecutionEngine } from '../trading/executionEngine.js'
 import type { TradeOrder } from '../trading/types.js'
 import type { TrackedUser, PolymarketTrade, DetectedTrade, CopyTradingConfig, MarketData } from './types.js'
 import { v4 as uuidv4 } from 'uuid'
+import { getDatabase } from '../database/client.js'
+import { insertDetectedTrade, markTradeExecuted, markTradeError, getAllSeenTransactionHashes } from '../database/repositories/detectedTradeRepository.js'
 
 const POLYMARKET_ACTIVITY_API_URL = 'https://data-api.polymarket.com/activity'
 const POLYMARKET_MARKETS_API_URL = 'https://gamma-api.polymarket.com/markets'
@@ -64,13 +66,26 @@ export class CopyTradingService {
       enabled: false,
       trackedUsers: trackedUsers.length > 0 ? trackedUsers : defaultUsers,
       minTradeSize: 10, // Minimum $10 trade to execute (absolute minimum)
-      maxTradeSize: 1000, // Maximum trade size we'll execute (our max position size)
+      maxTradeSize: 100, // Maximum trade size we'll execute (our max position size)
       recentTradesWindow: 15, // Track last 10 trades for volume calculation
       minVolumeForScaling: 1000, // Need at least $1000 in recent volume to use proportional scaling
     }
 
+    // Load previously seen transactions from database
+    try {
+      const db = getDatabase()
+      const seenHashes = getAllSeenTransactionHashes(db)
+      this.seenTransactionHashes = new Set(seenHashes)
+      logger.info('Loaded seen transactions from database', {
+        count: seenHashes.length,
+      })
+    } catch (error) {
+      logger.warn('Could not load seen transactions from database', { error })
+    }
+
     logger.info('Copy trading service initialized', {
       trackedUsersCount: this.config.trackedUsers.length,
+      seenTransactions: this.seenTransactionHashes.size,
     })
   }
 
@@ -340,6 +355,14 @@ export class CopyTradingService {
 
     this.detectedTrades.push(detectedTrade)
 
+    // Persist detected trade to database
+    try {
+      const db = getDatabase()
+      insertDetectedTrade(db, detectedTrade)
+    } catch (error) {
+      logger.error('Failed to persist detected trade to database', { error, txHash: tradeHash })
+    }
+
     logger.info('📋 New trade detected from tracked user', {
       user: user.name || user.address,
       side: trade.side,
@@ -431,6 +454,15 @@ export class CopyTradingService {
       if (result.status === 'filled' || result.status === 'partial') {
         detectedTrade.executed = true
         detectedTrade.executedAt = Date.now()
+
+        // Mark trade as executed in database
+        try {
+          const db = getDatabase()
+          markTradeExecuted(db, trade.transactionHash, detectedTrade.executedAt)
+        } catch (dbError) {
+          logger.error('Failed to mark trade as executed in database', { dbError, txHash: trade.transactionHash })
+        }
+
         logger.info('✅ Copy trade executed successfully', {
           transactionHash: trade.transactionHash,
           status: result.status,
@@ -438,6 +470,15 @@ export class CopyTradingService {
         })
       } else {
         detectedTrade.executionError = `Trade status: ${result.status}`
+
+        // Mark trade error in database
+        try {
+          const db = getDatabase()
+          markTradeError(db, trade.transactionHash, detectedTrade.executionError)
+        } catch (dbError) {
+          logger.error('Failed to mark trade error in database', { dbError, txHash: trade.transactionHash })
+        }
+
         logger.warn('Copy trade execution failed', {
           transactionHash: trade.transactionHash,
           status: result.status,
@@ -446,6 +487,15 @@ export class CopyTradingService {
     } catch (error) {
       detectedTrade.executionError =
         error instanceof Error ? error.message : String(error)
+
+      // Mark trade error in database
+      try {
+        const db = getDatabase()
+        markTradeError(db, trade.transactionHash, detectedTrade.executionError)
+      } catch (dbError) {
+        logger.error('Failed to mark trade error in database', { dbError, txHash: trade.transactionHash })
+      }
+
       logger.error('Error executing copy trade', {
         error,
         transactionHash: trade.transactionHash,

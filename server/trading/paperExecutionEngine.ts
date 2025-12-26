@@ -18,6 +18,10 @@ import {
   ExecutionMode,
   OrderStatus,
 } from './types.js'
+import { getDatabase } from '../database/client.js'
+import { insertTrade, getTradeHistory as dbGetTradeHistory } from '../database/repositories/tradeRepository.js'
+import { upsertPosition, getAllPositions, deletePosition } from '../database/repositories/positionRepository.js'
+import { getAccountState, initializeAccountState, updateBalance, updateAccountState } from '../database/repositories/accountRepository.js'
 
 export class PaperExecutionEngine implements IExecutionEngine {
   private marketStore: MarketStore
@@ -30,8 +34,45 @@ export class PaperExecutionEngine implements IExecutionEngine {
   constructor(marketStore: MarketStore) {
     this.marketStore = marketStore
     const config = getConfig()
-    this.startingCapital = config.capital
-    this.currentBalance = config.capital
+
+    // Load state from database
+    try {
+      const db = getDatabase()
+      const accountState = getAccountState(db)
+
+      if (accountState) {
+        // Resume from saved state
+        this.startingCapital = accountState.starting_capital
+        this.currentBalance = accountState.current_balance
+        this.realizedPnL = accountState.realized_pnl
+
+        // Load positions
+        const savedPositions = getAllPositions(db)
+        for (const pos of savedPositions) {
+          this.positions.set(pos.marketId, pos)
+        }
+
+        logger.info('Restored state from database', {
+          balance: this.currentBalance,
+          positions: savedPositions.length,
+          realizedPnL: this.realizedPnL,
+        })
+      } else {
+        // Initialize new state
+        this.startingCapital = config.capital
+        this.currentBalance = config.capital
+        initializeAccountState(db, config.capital)
+
+        logger.info('Initialized new account state', {
+          startingCapital: this.startingCapital,
+        })
+      }
+    } catch (error) {
+      // If database is not available, fall back to config values
+      logger.warn('Could not load state from database, using config defaults', { error })
+      this.startingCapital = config.capital
+      this.currentBalance = config.capital
+    }
 
     logger.info('Paper execution engine initialized', {
       startingCapital: this.startingCapital,
@@ -133,8 +174,18 @@ export class PaperExecutionEngine implements IExecutionEngine {
       mode: 'paper',
     }
 
+    // Persist trade to database
+    try {
+      const db = getDatabase()
+      insertTrade(db, trade)
+      updateBalance(db, this.currentBalance)
+    } catch (error) {
+      logger.error('Failed to persist trade to database', { error, tradeId: trade.tradeId })
+    }
+
+    // Also keep in memory for backward compatibility (if needed)
     this.tradeHistory.push(trade)
-    // Keep only last 1000 trades
+    // Keep only last 1000 trades in memory
     if (this.tradeHistory.length > 1000) {
       this.tradeHistory = this.tradeHistory.slice(-1000)
     }
@@ -219,6 +270,14 @@ export class PaperExecutionEngine implements IExecutionEngine {
 
     // Update current prices and PnL
     this.updatePositionPnL(position)
+
+    // Persist position to database
+    try {
+      const db = getDatabase()
+      upsertPosition(db, position)
+    } catch (error) {
+      logger.error('Failed to persist position to database', { error, marketId: position.marketId })
+    }
   }
 
   private updatePositionPnL(position: Position): void {
@@ -315,6 +374,15 @@ export class PaperExecutionEngine implements IExecutionEngine {
     // Remove position
     this.positions.delete(marketId)
 
+    // Delete position from database and update account state
+    try {
+      const db = getDatabase()
+      deletePosition(db, marketId)
+      updateAccountState(db, this.currentBalance, this.realizedPnL)
+    } catch (error) {
+      logger.error('Failed to delete position from database', { error, marketId })
+    }
+
     logger.info('Position closed', { marketId, results: results.length })
 
     // Notify arbitrage service that position is closed (if it exists)
@@ -388,6 +456,14 @@ export class PaperExecutionEngine implements IExecutionEngine {
       mode: 'paper',
     }
 
+    // Persist redemption to database
+    try {
+      const db = getDatabase()
+      insertTrade(db, redemptionRecord)
+    } catch (error) {
+      logger.error('Failed to persist redemption to database', { error, marketId })
+    }
+
     this.tradeHistory.push(redemptionRecord)
 
     // Trim trade history if needed
@@ -397,6 +473,15 @@ export class PaperExecutionEngine implements IExecutionEngine {
 
     // Remove position
     this.positions.delete(marketId)
+
+    // Delete position from database and update account state
+    try {
+      const db = getDatabase()
+      deletePosition(db, marketId)
+      updateAccountState(db, this.currentBalance, this.realizedPnL)
+    } catch (error) {
+      logger.error('Failed to delete position from database after redemption', { error, marketId })
+    }
 
     logger.info('✅ Position redeemed at settlement value', {
       marketId,
@@ -430,7 +515,14 @@ export class PaperExecutionEngine implements IExecutionEngine {
   }
 
   getTradeHistory(limit: number = 100): TradeRecord[] {
-    return this.tradeHistory.slice(-limit).reverse()
+    // Query from database instead of in-memory array
+    try {
+      const db = getDatabase()
+      return dbGetTradeHistory(db, limit, 0)
+    } catch (error) {
+      logger.error('Failed to get trade history from database, falling back to in-memory', { error })
+      return this.tradeHistory.slice(-limit).reverse()
+    }
   }
 
   getMode(): ExecutionMode {

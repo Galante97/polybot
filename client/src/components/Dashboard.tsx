@@ -1,7 +1,6 @@
 import Header from './Header'
 import PositionsPanel from './PositionsPanel'
 import TradeHistory from './TradeHistory'
-import PriceHistory from './PriceHistory'
 import TrackedUsers from './TrackedUsers'
 import DetectedTrades from './DetectedTrades'
 import './Dashboard.css'
@@ -22,12 +21,7 @@ function Dashboard(): JSX.Element {
         <div className="dashboard-bottom-left">
           <DetectedTrades />
         </div>
-        <div className="dashboard-bottom-center">
-          <TradeHistory />
-        </div>
-        <div className="dashboard-bottom-right">
-          <PriceHistory />
-        </div>
+    
       </div>
     </div>
   )

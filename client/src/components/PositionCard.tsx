@@ -78,7 +78,7 @@ function PositionCard({ position, onClose }: PositionCardProps): JSX.Element {
         </div>
         <div className="summary-row">
           <span>Entry Time:</span>
-          <span>{formatDate(position.entryTimestamp)}</span>
+          <span>{formatDate(position.lastUpdate)}</span>
         </div>
       </div>
     </div>

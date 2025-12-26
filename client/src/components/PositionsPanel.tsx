@@ -37,7 +37,7 @@ function PositionsPanel(): JSX.Element {
         ) : (
           sortedPositions.map((position) => (
             <PositionCard
-              key={position.positionId}
+              key={position.marketId}
               position={position}
               onClose={() => closePosition(position.marketId)}
             />

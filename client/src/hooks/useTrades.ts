@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { TradeRecord } from '../types/api.js'
+import { TradeRecord } from '../../../server/trading/types'
+// import type { TradeRecord } from '../types/api.js'
 
 const POLL_INTERVAL = 1000 // 1 second
 

@@ -7,9 +7,9 @@ import { MarketDataService } from './market/marketDataService.js'
 import { MarketDiscoveryService } from './market/marketDiscovery.js'
 import { PaperExecutionEngine } from './trading/paperExecutionEngine.js'
 import { CopyTradingService } from './copytrading/copyTradingService.js'
-import { PriceHistoryService } from './market/priceHistory.js'
 import { v4 as uuidv4 } from 'uuid'
 import type { TradeOrder } from './trading/types.js'
+import { initializeDatabase, closeDatabase } from './database/client.js'
 
 const config = getConfig()
 const app: Express = express()
@@ -17,7 +17,6 @@ const app: Express = express()
 // Initialize services
 const marketDataService = new MarketDataService()
 const marketDiscoveryService = new MarketDiscoveryService()
-const priceHistoryService = new PriceHistoryService()
 let executionEngine: PaperExecutionEngine | null = null
 let copyTradingService: CopyTradingService | null = null
 
@@ -182,35 +181,7 @@ app.get('/api/market-data/subscriptions', (req: Request, res: Response) => {
   })
 })
 
-// Price History API Routes
-app.get('/api/price-history', (req: Request, res: Response) => {
-  const marketId = req.query.marketId as string | undefined
-  if (marketId) {
-    const history = priceHistoryService.getMarketHistory(marketId)
-    if (!history) {
-      return res.status(404).json({ error: 'Price history not found for market', marketId })
-    }
-    res.json(history)
-  } else {
-    const allHistory = priceHistoryService.getAllHistory()
-    res.json({
-      history: allHistory,
-      count: allHistory.length,
-      isTracking: priceHistoryService.isTrackingActive(),
-      startTime: priceHistoryService.getTrackingStartTime(),
-    })
-  }
-})
-
-app.get('/api/price-history/summary', (req: Request, res: Response) => {
-  const summary = priceHistoryService.getHistorySummary()
-  res.json({
-    summary,
-    count: summary.length,
-    isTracking: priceHistoryService.isTrackingActive(),
-    startTime: priceHistoryService.getTrackingStartTime(),
-  })
-})
+// Price History API Routes - Removed (feature deprecated)
 
 app.post('/api/markets/:conditionId/subscribe', async (req: Request, res: Response) => {
   try {
@@ -485,9 +456,6 @@ app.post('/api/copy-trading/start', (req: Request, res: Response) => {
     return res.status(503).json({ error: 'Copy trading service not initialized' })
   }
 
-  // Start price history tracking when bot starts
-  priceHistoryService.startTracking()
-
   copyTradingService.start()
   res.json({ message: 'Copy trading service started', status: copyTradingService.getStatus() })
 })
@@ -496,9 +464,6 @@ app.post('/api/copy-trading/stop', (req: Request, res: Response) => {
   if (!copyTradingService) {
     return res.status(503).json({ error: 'Copy trading service not initialized' })
   }
-
-  // Stop price history tracking when bot stops
-  priceHistoryService.stopTracking()
 
   copyTradingService.stop()
   res.json({ message: 'Copy trading service stopped', status: copyTradingService.getStatus() })
@@ -593,6 +558,15 @@ const server = app.listen(config.port, async () => {
   })
   logger.info(`📡 API available at http://localhost:${config.port}/api`)
 
+  // Initialize database FIRST before any services
+  try {
+    initializeDatabase()
+    logger.info('✅ Database initialized successfully')
+  } catch (error) {
+    logger.error('❌ Database initialization failed', { error })
+    process.exit(1) // Cannot run without database
+  }
+
   // Start market data service (non-blocking - server continues even if WebSocket fails)
   marketDataService.start().catch((error) => {
     logger.error('Market data service startup error (non-fatal)', {
@@ -615,15 +589,7 @@ const server = app.listen(config.port, async () => {
       logger.info('✅ Copy trading service initialized')
     }
 
-    // Register price history callback to track price changes
-    marketStore.onUpdate(() => {
-      if (priceHistoryService.isTrackingActive()) {
-        const markets = marketStore.getAllMarkets()
-        for (const market of markets) {
-          priceHistoryService.recordUpdate(market)
-        }
-      }
-    })
+    // Price history tracking removed
   }, 1000)
 })
 
@@ -645,6 +611,14 @@ lifecycle.registerShutdownHandler(async () => {
     await marketDataService.stop()
   } catch (error) {
     logger.error('Error stopping market data service', { error })
+  }
+
+  // Close database connection
+  try {
+    closeDatabase()
+    logger.info('Database connection closed')
+  } catch (error) {
+    logger.error('Error closing database', { error })
   }
 
   // Then close HTTP server
