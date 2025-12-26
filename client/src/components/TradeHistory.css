@@ -1,0 +1,146 @@
+.trade-history {
+  background: #1a1f3a;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.trade-history h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.25rem;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.trade-table-container {
+  flex: 1 1 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.trade-table-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.trade-table-container::-webkit-scrollbar-track {
+  background: #0f1322;
+  border-radius: 4px;
+}
+
+.trade-table-container::-webkit-scrollbar-thumb {
+  background: #3a4a7a;
+  border-radius: 4px;
+}
+
+.trade-table-container::-webkit-scrollbar-thumb:hover {
+  background: #4a5a8a;
+}
+
+.trade-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.trade-table thead {
+  position: sticky;
+  top: 0;
+  background: #252b47;
+  z-index: 10;
+}
+
+.trade-table th {
+  padding: 0.75rem;
+  text-align: left;
+  color: #a0a0a0;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #3a4a7a;
+}
+
+.trade-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #2d3561;
+  color: #e0e0e0;
+}
+
+.trade-table tbody tr:hover {
+  background: #252b47;
+}
+
+.market-cell {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #a0a0a0;
+}
+
+.side-badge,
+.action-badge,
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.side-badge.yes {
+  background: #4ade80;
+  color: #0a0e27;
+}
+
+.side-badge.no {
+  background: #f87171;
+  color: #ffffff;
+}
+
+.action-badge.buy {
+  background: #4ade80;
+  color: #0a0e27;
+}
+
+.action-badge.sell {
+  background: #f87171;
+  color: #ffffff;
+}
+
+.status-badge.filled {
+  background: #4ade80;
+  color: #0a0e27;
+}
+
+.status-badge.partial {
+  background: #fbbf24;
+  color: #0a0e27;
+}
+
+.status-badge.rejected {
+  background: #f87171;
+  color: #ffffff;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #a0a0a0;
+}
+
+.loading,
+.error {
+  text-align: center;
+  padding: 2rem;
+  color: #a0a0a0;
+}
+
+.error {
+  color: #f87171;
+}
+
