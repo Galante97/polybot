@@ -10,6 +10,8 @@ import { CopyTradingService } from './copytrading/copyTradingService.js'
 import { v4 as uuidv4 } from 'uuid'
 import type { TradeOrder } from './trading/types.js'
 import { initializeDatabase, closeDatabase } from './database/client.js'
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const config = getConfig()
 const app: Express = express()
@@ -34,6 +36,14 @@ app.use(express.urlencoded({ extended: true }))
 //   })
 //   next()
 // })
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const topLevelPath = __dirname.replace('/server', '');
+
+app.use(express.static(topLevelPath));
+
 
 // API Routes
 app.get('/api/hello', (req: Request, res: Response) => {
@@ -527,6 +537,12 @@ app.delete('/api/copy-trading/tracked-users/:address', (req: Request, res: Respo
   copyTradingService.removeTrackedUser(address)
   res.json({ message: 'User removed', trackedUsers: copyTradingService.getTrackedUsers() })
 })
+
+// All other routes serve index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(topLevelPath, 'index.html'));
+});
+
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
